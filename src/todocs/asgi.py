@@ -1,5 +1,5 @@
 """
-ASGI config for todocs project.
+ASGI config for todocs projects.
 
 It exposes the ASGI callable as a module-level variable named ``application``.
 

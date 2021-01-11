@@ -1,5 +1,5 @@
 """
-WSGI config for todocs project.
+WSGI config for todocs projects.
 
 It exposes the WSGI callable as a module-level variable named ``application``.
 
