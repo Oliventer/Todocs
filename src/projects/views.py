@@ -1,12 +1,12 @@
 from rest_framework import viewsets, status
 from projects.models import Project, Collaboration
-from users.models import User
-from projects.serializer import ProjectSerializer, CollaborationSerializer
+from projects.serializer import ProjectSerializer, CollaborationSerializer, ProjectChangeOwnerSerializer, ProjectUpdateSerializer
 from rest_framework.response import Response
 from projects.project_creator import ProjectCreator
 from rest_framework.decorators import action
 from projects.permission import IsProjectOwner
 from rest_framework.permissions import IsAuthenticated
+from django.db.models import Prefetch
 
 
 class ProjectViewset(viewsets.ModelViewSet):
@@ -23,7 +23,15 @@ class CollaborationViewset(viewsets.ModelViewSet):
     serializer_class = CollaborationSerializer
 
     def get_queryset(self):
-        return Collaboration.objects.filter(project__in=self.request.user.project_set.all()).order_by('pk')
+        return Collaboration.objects.filter(project__in=self.request.user.project_set.all())\
+            .order_by('pk').prefetch_related(Prefetch('project', Project.objects.filter(users=self.request.user)))
+
+    def get_serializer_class(self):
+        if self.action == "update":
+            return ProjectUpdateSerializer
+        elif self.action == "transfer_ownership":
+            return ProjectChangeOwnerSerializer
+        return CollaborationSerializer
 
     def get_permissions(self):
         permission_classes = [IsAuthenticated]
@@ -36,42 +44,35 @@ class CollaborationViewset(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        user = User.objects.get(pk=request.data['user'])
-        project = Project.objects.get(pk=request.data['project'])
-
-        if not Project.add_collaborator(request, user, project):
-            return Response(status=status.HTTP_403_FORBIDDEN)
+        project = serializer.validated_data['project']
+        project.add_collaborator(serializer.validated_data['user'], serializer.validated_data['access_level'])
 
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def update(self, request, *args, **kwargs):
-        user = self.get_object()
+        collaboration_for_update = self.get_object()
 
-        if not Project.edit_collaborator(user, request):
-            return Response(status=status.HTTP_403_FORBIDDEN)
-
-        serializer = self.get_serializer(user, data=request.data)
+        serializer = self.get_serializer(collaboration_for_update, data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        return Response(serializer.data)
+        access_level_for_update = serializer.validated_data['access_level']
+        collaboration_for_update.project.edit_collaborator(collaboration_for_update.user, access_level_for_update)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def destroy(self, request, *args, **kwargs):
-        collaboration = Collaboration.objects.get(pk=kwargs['pk'])
-
-        if not Project.remove_collaborator(request, collaboration):
-            return Response(status=status.HTTP_403_FORBIDDEN)
+        collaboration = self.get_object()
+        collaboration.project.remove_collaborator(collaboration.user)
 
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    @action(detail=True, methods=['put'])
+    @action(detail=True, methods=['put'], serializer_class=ProjectChangeOwnerSerializer)
     def transfer_ownership(self, request, *args, **kwargs):
-        another_user = self.get_object()
-        owner = Collaboration.objects.get(user=request.user, project=another_user.project)
-
-        if not Project.change_owner(owner, another_user):
-            return Response(status=status.HTTP_403_FORBIDDEN)
-
-        serializer = self.get_serializer(another_user, data=request.data)
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
+        collaboration = self.get_object()
+        demote_to = serializer.validated_data['demote_to']
+
+        collaboration.project.change_owner(collaboration, demote_to)
         return Response(serializer.data, status=status.HTTP_200_OK)
