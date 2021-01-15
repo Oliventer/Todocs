@@ -5,6 +5,7 @@ from projects.project_creator import ProjectCreator
 from projects.models import Project, Collaboration, Perms, OwnerMutationError
 from projects.permission import IsProjectOwner
 from projects.views import CollaborationViewset
+from django.db.utils import IntegrityError
 
 pytestmark = [pytest.mark.django_db]
 
@@ -126,3 +127,11 @@ def test_is_project_owner_permission_owner_do_not_have_permissions_for_own_insta
     request.user = owner_collaboration.user
     perms = IsProjectOwner.has_object_permission(IsProjectOwner, request, CollaborationViewset, owner_collaboration)
     assert perms is False
+
+
+def test_collaborations_unique_constraint(owner_collaboration):
+    with pytest.raises(IntegrityError):
+        collaboration = Collaboration(user=owner_collaboration.user,
+                                      project=owner_collaboration.project,
+                                      access_level=Perms.READ_ONLY)
+        collaboration.save()

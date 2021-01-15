@@ -2,7 +2,7 @@ from django.db import models
 from django_hashedfilenamestorage.storage import HashedFilenameFileSystemStorage
 
 
-fs = HashedFilenameFileSystemStorage(location='/Users/AOKov/PycharmProjects/todocs/files/')
+fs = HashedFilenameFileSystemStorage(location='../files')
 
 
 class FileType(models.TextChoices):

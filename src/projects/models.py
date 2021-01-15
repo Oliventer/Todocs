@@ -59,3 +59,8 @@ class Collaboration(models.Model):
     user = models.ForeignKey('users.User', on_delete=models.CASCADE)
     project = models.ForeignKey(Project, on_delete=models.CASCADE)
     access_level = models.TextField(choices=Perms.choices)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'project'], name='unique collaboration')
+        ]
